@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kirchhoff-cli"
+version = "0.1.0"
+description = "A Python CLI toolkit for electrical engineering calculations, circuit analysis, and symbolic math."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "rich>=15.0.0",
+    "sympy>=1.14.0",
+    "typer>=0.25.1",
+]
+
+[project.scripts]
+khoff = "kirchhoff.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
