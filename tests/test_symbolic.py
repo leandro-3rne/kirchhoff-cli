@@ -125,3 +125,16 @@ def test_fourier_series_accepts_function_name_shorthand():
     x = sp.Symbol("x")
     assert sp.simplify(result["expression"] - sp.cos(x)) == 0
     assert sp.simplify(result["polynomial"] - sp.cos(x)) == 0
+
+
+def test_fourier_series_accepts_suffix_function_shorthand():
+    result = fourier_series("cosx + coshx", variable="x", period="2*pi", order=3)
+    x = sp.Symbol("x")
+    assert sp.simplify(result["expression"] - (sp.cos(x) + sp.cosh(x))) == 0
+
+
+def test_taylor_series_accepts_suffix_function_shorthand():
+    result = taylor_series("sinx + expx", variable="x", order=3)
+    x = sp.Symbol("x")
+    expected = sp.expand((sp.sin(x) + sp.exp(x)).series(x, 0, 4).removeO())
+    assert sp.simplify(result["polynomial"] - expected) == 0

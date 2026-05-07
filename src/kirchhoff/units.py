@@ -89,15 +89,7 @@ VALUE_RE = re.compile(
 
 
 def parse_value(value: str, expected_unit: str | None = None) -> float:
-    """
-    Parse values like:
-      1k, 4.7k, 10mA, 100nF, 6e-3ohm, 2Mohm, 1.5uF, 3µF, 2T
-
-    expected_unit examples:
-      "ohm", "V", "A", "F", "H"
-
-    If expected_unit is given, incompatible units raise ValueError.
-    """
+    """Parse a number with an optional SI prefix and unit suffix."""
 
     if not isinstance(value, str):
         raise TypeError("value must be a string")
@@ -125,30 +117,17 @@ def parse_value(value: str, expected_unit: str | None = None) -> float:
 
 
 def split_prefix_unit(suffix: str) -> tuple[str, str]:
-    """
-    Split suffix into SI prefix and unit.
-
-    Examples:
-      k       -> ("k", "")
-      kohm    -> ("k", "ohm")
-      mA      -> ("m", "A")
-      uF      -> ("u", "F")
-      µF      -> ("µ", "F")
-      ohm     -> ("", "ohm")
-      V       -> ("", "V")
-    """
+    """Split a suffix into SI prefix and unit."""
 
     if suffix == "":
         return "", ""
 
-    # Full unit without prefix
     try:
         if normalize_unit(suffix) != "":
             return "", suffix
     except ValueError:
         pass
 
-    # Prefix + unit
     first = suffix[0]
     rest = suffix[1:]
 
@@ -186,12 +165,7 @@ def normalize_unit(unit: str) -> str:
 
 
 def format_si(value: float, unit: str = "", precision: int = 4) -> str:
-    """
-    Format a number with a suitable SI prefix.
-    Example:
-      0.001 -> 1 m
-      4700  -> 4.7 k
-    """
+    """Format a number with a suitable SI prefix."""
 
     if value == 0:
         return f"0 {unit}".strip()

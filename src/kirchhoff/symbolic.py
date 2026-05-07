@@ -1,12 +1,13 @@
-import sympy as sp
 import re
+
+import sympy as sp
 from sympy.parsing.sympy_parser import (
+    auto_symbol,
+    convert_xor,
+    function_exponentiation,
+    implicit_multiplication_application,
     parse_expr,
     standard_transformations,
-    convert_xor,
-    implicit_multiplication_application,
-    function_exponentiation,
-    auto_symbol,
 )
 
 
@@ -26,14 +27,15 @@ IMPLICIT_ARG_FUNCTIONS = (
 def _normalize_math_input(expr: str, variable_name: str) -> str:
     text = expr.strip()
     for fn_name in IMPLICIT_ARG_FUNCTIONS:
+        # Accept shorthand like sinx, cosx, coshx, expx (for current variable).
+        suffix_pattern = rf"\b{fn_name}{variable_name}\b"
+        text = re.sub(suffix_pattern, f"{fn_name}({variable_name})", text)
         pattern = rf"\b{fn_name}\b(?!\s*\()"
         text = re.sub(pattern, f"{fn_name}({variable_name})", text)
     return text
 
 
-def _sympify_with_complex_j(
-    expr: str, variable_symbol: sp.Symbol
-) -> sp.Expr:
+def _sympify_with_complex_j(expr: str, variable_symbol: sp.Symbol) -> sp.Expr:
     normalized = _normalize_math_input(expr, variable_symbol.name)
     locals_map = {
         "I": sp.I,
@@ -72,8 +74,6 @@ def _sympify_with_complex_j(
             evaluate=True,
         )
     except Exception:
-        # Fallback for simple constants/symbols that should still be valid,
-        # e.g. "a" or "5".
         try:
             return sp.sympify(normalized, locals=locals_map)
         except Exception as exc:
@@ -153,8 +153,18 @@ def fourier_series(
         raise ValueError("period must be positive")
 
     interval_half = sp.simplify(T / 2)
-    fs_obj = sp.fourier_series(expr, (x, -interval_half, interval_half))
-    partial_sum = sp.expand_trig(fs_obj.truncate(order + 1))
+    try:
+        fs_obj = sp.fourier_series(expr, (x, -interval_half, interval_half))
+        partial_sum = fs_obj.truncate(order + 1)
+    except Exception:
+        # Robust fallback for complex-valued expressions:
+        # compute Fourier series of real and imaginary parts separately.
+        real_fs = sp.fourier_series(sp.re(expr), (x, -interval_half, interval_half))
+        imag_fs = sp.fourier_series(sp.im(expr), (x, -interval_half, interval_half))
+        fs_obj = None
+        partial_sum = real_fs.truncate(order + 1) + sp.I * imag_fs.truncate(order + 1)
+
+    partial_sum = sp.simplify(sp.expand_trig(partial_sum))
 
     approximation = None
     true_value = None

@@ -1,25 +1,35 @@
+import sys
+from typing import Optional
+
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from typing import Optional
-
-from kirchhoff.units import parse_value, format_si
+from kirchhoff.circuits import current_divider, voltage_divider
 from kirchhoff.circuits import ohm as solve_ohm
 from kirchhoff.circuits import power as solve_power
 from kirchhoff.circuits import rc as solve_rc
 from kirchhoff.circuits import rl as solve_rl
-from kirchhoff.circuits import voltage_divider, current_divider
+from kirchhoff.formatting import print_kv, print_title
 from kirchhoff.resistance import equivalent_resistance
 from kirchhoff.symbolic import taylor_series, fourier_series
-from kirchhoff.formatting import print_title, print_kv
+from kirchhoff.units import format_si, parse_value
+
+
+def _configure_output_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
+_configure_output_encoding()
 
 app = typer.Typer(help="Electrical engineering command-line toolkit.")
 console = Console()
 
-PRIMARY = "#f5c71a"      # warm yellow
-SECONDARY = "#d4a900"    # darker gold
-ACCENT = "#8b5cf6"       # subtle violet
+PRIMARY = "#f5c71a"
+SECONDARY = "#d4a900"
+ACCENT = "#8b5cf6"
 DIM = "#8a8a8a"
 
 BANNER = r"""
@@ -39,13 +49,14 @@ def print_banner() -> None:
     for i, line in enumerate(lines):
         color = PRIMARY if i < 3 else SECONDARY
         console.print(f"[bold {color}]{line}[/bold {color}]")
-    console.print(
-    f"[bold {PRIMARY}]Electrical Engineering CLI Toolkit"
-    )
+    console.print(f"[bold {PRIMARY}]Electrical Engineering CLI Toolkit")
     console.print(
         f"[bold {SECONDARY}]Circuits • Transient Analysis • Taylor Series • Fourier Series[/bold {SECONDARY}]"
     )
-    console.print(f"[{DIM}]Run[/ {DIM}] [bold {ACCENT}]khoff --help[/bold {ACCENT}] [{DIM}]or[/ {DIM}] [bold {ACCENT}]khoff <command> --help[/bold {ACCENT}]")
+    console.print(
+        f"[{DIM}]Run[/ {DIM}] [bold {ACCENT}]khoff --help[/bold {ACCENT}] "
+        f"[{DIM}]or[/ {DIM}] [bold {ACCENT}]khoff <command> --help[/bold {ACCENT}]"
+    )
     console.print()
 
 
@@ -81,7 +92,7 @@ def _parse_option_value(value: str, expected_unit: str, option_name: str) -> flo
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         print_banner()
         print_commands()
@@ -91,14 +102,14 @@ def main(ctx: typer.Context):
 def r(
     expression_parts: list[str] = typer.Argument(
         ...,
-        help=(
-            'Resistance expression. Use quotes, e.g. "1k + (2k || 3k)".'
-        ),
+        help='Resistance expression. Use quotes, e.g. "1k + (2k || 3k)".',
     ),
-):
+) -> None:
     """Calculate equivalent resistance from a series/parallel expression"""
     if len(expression_parts) != 1:
-        raise typer.BadParameter('Wrap the full expression in quotes, e.g. "1k + (2k || 3k)".')
+        raise typer.BadParameter(
+            'Wrap the full expression in quotes, e.g. "1k + (2k || 3k)".'
+        )
     expression = expression_parts[0].strip()
     try:
         result = equivalent_resistance(expression)
@@ -115,7 +126,7 @@ def ohm(
     v: Optional[str] = typer.Option(None, "--v", help="Voltage V (e.g. 5, 3.3V)"),
     i: Optional[str] = typer.Option(None, "--i", help="Current I (e.g. 20mA)"),
     r: Optional[str] = typer.Option(None, "--r", help="Resistance R (e.g. 220, 4.7k)"),
-):
+) -> None:
     """Solve Ohm's law. Provide exactly two of V, I, and R"""
     try:
         result = solve_ohm(
@@ -138,7 +149,7 @@ def power(
     v: Optional[str] = typer.Option(None, "--v", help="Voltage V (e.g. 5, 3.3V)"),
     i: Optional[str] = typer.Option(None, "--i", help="Current I (e.g. 20mA)"),
     r: Optional[str] = typer.Option(None, "--r", help="Resistance R (e.g. 220, 4.7k)"),
-):
+) -> None:
     """Compute power P and derived V, I, R values from two inputs"""
     try:
         result = solve_power(
@@ -161,9 +172,17 @@ def div(
     mode: str = typer.Argument(..., help="Divider mode: 'v' for voltage, 'i' for current"),
     r1: str = typer.Option(..., "--r1", help="Resistor R1 (e.g. 10k)"),
     r2: str = typer.Option(..., "--r2", help="Resistor R2 (e.g. 4.7k)"),
-    vin: Optional[str] = typer.Option(None, "--vin", help="Input voltage Vin for mode 'v' (e.g. 5V)"),
-    iin: Optional[str] = typer.Option(None, "--iin", help="Input current Iin for mode 'i' (e.g. 10mA)"),
-):
+    vin: Optional[str] = typer.Option(
+        None,
+        "--vin",
+        help="Input voltage Vin for mode 'v' (e.g. 5V)",
+    ),
+    iin: Optional[str] = typer.Option(
+        None,
+        "--iin",
+        help="Input current Iin for mode 'i' (e.g. 10mA)",
+    ),
+) -> None:
     """Analyze voltage and current divider circuits"""
     try:
         r1_value = _parse_option_value(r1, "ohm", "--r1")
@@ -213,7 +232,7 @@ def rc(
     vin: Optional[str] = typer.Option(None, "--vin", help="Final/input voltage Vf (e.g. 5V)"),
     v0: str = typer.Option("0V", "--v0", help="Initial capacitor voltage V0 (default: 0V)"),
     t: Optional[str] = typer.Option(None, "--t", help="Evaluation time t (e.g. 2ms)"),
-):
+) -> None:
     """Analyze an RC circuit: tau, cutoff frequency, and optional vC(t)"""
     try:
         r_value = _parse_option_value(r, "ohm", "--r")
@@ -233,7 +252,13 @@ def rc(
     console.print("vC(t) = Vf + (V0 - Vf) · exp(-t / τ)")
 
     if "vt" in result:
-        print_kv(console, f"vC({format_si(t_value, 's')})", format_si(result["vt"], "V"), bold_value=True)
+        print_kv(
+            console,
+            f"vC({format_si(t_value, 's')})",
+            format_si(result["vt"], "V"),
+            bold_value=True,
+        )
+
 
 @app.command()
 def rl(
@@ -242,7 +267,7 @@ def rl(
     vin: Optional[str] = typer.Option(None, "--vin", help="Input voltage Vin (e.g. 5V)"),
     i0: str = typer.Option("0A", "--i0", help="Initial inductor current I0 (default: 0A)"),
     t: Optional[str] = typer.Option(None, "--t", help="Evaluation time t (e.g. 1ms)"),
-):
+) -> None:
     """Analyze an RL circuit: tau, cutoff frequency, and optional i(t)"""
     try:
         r_value = _parse_option_value(r, "ohm", "--r")
@@ -262,7 +287,13 @@ def rl(
     console.print("i(t) = If + (I0 - If) · exp(-t / τ)")
 
     if "it" in result:
-        print_kv(console, f"i({format_si(t_value, 's')})", format_si(result["it"], "A"), bold_value=True)
+        print_kv(
+            console,
+            f"i({format_si(t_value, 's')})",
+            format_si(result["it"], "A"),
+            bold_value=True,
+        )
+
 
 @app.command()
 def ts(
@@ -281,10 +312,12 @@ def ts(
     around: str = typer.Option("0", "--around", help="Expansion point a."),
     order: int = typer.Option(5, "--order", help="Taylor order n (>= 0)"),
     value: Optional[str] = typer.Option(None, "--value", help="Evaluation point (optional)"),
-):
+) -> None:
     """Compute a Taylor polynomial and optional numeric evaluation"""
     if len(expression_parts) != 1:
-        raise typer.BadParameter('Wrap the full expression in quotes, e.g. "exp(x) + x^3".')
+        raise typer.BadParameter(
+            'Wrap the full expression in quotes, e.g. "exp(x) + x^3".'
+        )
     if order < 0:
         raise typer.BadParameter("Invalid value for --order: must be >= 0")
 
@@ -327,10 +360,12 @@ def fs(
     period: str = typer.Option("2*pi", "--period", help="Function period T."),
     order: int = typer.Option(5, "--order", help="Number of harmonics/terms (>= 0)"),
     value: Optional[str] = typer.Option(None, "--value", help="Evaluation point (optional)"),
-):
+) -> None:
     """Compute a truncated Fourier series and optional numeric evaluation"""
     if len(expression_parts) != 1:
-        raise typer.BadParameter('Wrap the full expression in quotes, e.g. "sin(x) + x^2".')
+        raise typer.BadParameter(
+            'Wrap the full expression in quotes, e.g. "sin(x) + x^2".'
+        )
     if order < 0:
         raise typer.BadParameter("Invalid value for --order: must be >= 0")
 

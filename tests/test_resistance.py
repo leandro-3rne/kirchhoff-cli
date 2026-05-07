@@ -19,6 +19,7 @@ def test_multiple_parallel():
     expected = 1 / (1 / 100 + 1 / 220 + 1 / 330)
     assert equivalent_resistance("100 || 220 || 330") == pytest.approx(expected)
 
+
 def test_units():
     assert equivalent_resistance("1kohm + 500ohm") == pytest.approx(1500)
 

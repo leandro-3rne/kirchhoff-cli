@@ -85,6 +85,7 @@ def test_rl_transient_value():
     assert result["if"] == pytest.approx(i_final)
     assert result["it"] == pytest.approx(expected)
 
+
 def test_voltage_divider():
     result = voltage_divider(vin=5, r1=10_000, r2=4_700)
 
