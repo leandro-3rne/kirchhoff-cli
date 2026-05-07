@@ -58,6 +58,7 @@ def print_commands() -> None:
     table.add_row("ts", "Taylor series expansion")
 
     console.print(table)
+    console.print()
 
 
 @app.callback(invoke_without_command=True)
