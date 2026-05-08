@@ -1,12 +1,12 @@
 # kirchhoff-cli
 
-`kirchhoff-cli` is a compact Python command-line toolkit for electrical engineering calculations. It provides quick terminal commands for resistance networks, Ohm's law, power calculations, divider circuits, RC/RL transients, Taylor series, and Fourier series.
+`kirchhoff-cli` is a compact Python command-line toolkit for electrical engineering calculations. It provides quick terminal commands for impedance networks, Ohm's law, power calculations, divider circuits, RC/RL transients, Taylor series, and Fourier series.
 
 ![kirchhoff-cli overview](docs/images/khoff-overview.png)
 
 ## Features
 
-- Equivalent resistance for series/parallel expressions such as `1k + (2k || 3k)`
+- Equivalent impedance for series/parallel expressions, including complex networks
 - Ohm's law and power calculations from two known values
 - Voltage and current divider analysis
 - RC and RL transient helpers with time constant and cutoff frequency
@@ -58,11 +58,23 @@ khoff
 
 ![command overview](docs/images/khoff-commands.png)
 
-### Resistance
+### Impedance
 
 ```bash
-khoff r "1k + (2k || 3k)"
+khoff z --r "1k + (2k || 3k)"
+khoff z --freq 78kHz "(5 + 8j) || (6 - 1/8j)"
+khoff z --omega 5 "3ohm || jomega3kH/(j*omega*5f)"
+khoff z --freq 80kHz "7 - jomega4H/-jomega8kH"
+khoff z --c "5 + 3f"
+khoff z --l "5h || 8kH"
+khoff z --c "5 + 3f" --omega 10
+khoff z --l "5h || 8kH" --freq 2kHz
 ```
+
+Notes:
+- `--r`, `--c`, and `--l` are passive-network modes and support component terms combined with `+` and `||` only.
+- For full formulas with `j`, `omega`, multiplication/division, and subtraction, use the general positional impedance mode:
+  `khoff z --omega 5 "3ohm || jomega3kH/(j*omega*5f)"`.
 
 ### Ohm's Law
 
@@ -105,7 +117,8 @@ khoff rl --r 100 --l 10mH --vin 5V --t 1ms
 
 ```bash
 khoff ts "exp(x)" --order 5
-khoff ts "sin(x)" --around 0 --order 5 --value 0.2
+khoff ts "sinx + cosh" --around 0 --order 5 --value 0.2
+khoff ts "ln(1+x) + squarex" --order 4
 ```
 
 ### Fourier Series
@@ -113,7 +126,15 @@ khoff ts "sin(x)" --around 0 --order 5 --value 0.2
 ```bash
 khoff fs "sin(x)" --period "2*pi" --order 5
 khoff fs "x" --period "2*pi" --order 3
+khoff fs "sawtoothx + trianglex" --period "2*pi" --order 7
+khoff fs "heaviside(sin(x))" --period "2*pi" --order 9
 ```
+
+Symbolic aliases:
+- `ln(...)` is supported as an alias for `log(...)`.
+- `square(x)` / `squarex` denote a periodic square wave.
+- `sawtooth(...)`, `triangle(...)`, and `heaviside(...)` are supported for Fourier use.
+- For Taylor series, discontinuous/non-smooth terms (e.g. `square`, `heaviside`, `sawtooth`, `triangle`) raise a clear error.
 
 ## Supported Value Syntax
 
@@ -130,7 +151,7 @@ Values can be entered with or without units:
 3µF
 ```
 
-Supported unit families include resistance, voltage, current, capacitance, inductance, and time.
+Supported unit families include resistance, voltage, current, capacitance, inductance, time, and frequency (Hz).
 
 ## Development
 
@@ -185,7 +206,7 @@ uv run pytest
 src/kirchhoff/
   cli.py          CLI commands and terminal output
   circuits.py     Circuit formulas
-  resistance.py   Series/parallel resistance parser
+  resistance.py   Impedance/resistance expression parser
   symbolic.py     Taylor and Fourier helpers
   units.py        SI value parsing and formatting
 tests/            Pytest test suite
@@ -193,4 +214,4 @@ tests/            Pytest test suite
 
 ## License
 
-Add your preferred license before publishing the repository.
+This project is licensed under the MIT License.

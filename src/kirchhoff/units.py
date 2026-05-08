@@ -65,6 +65,12 @@ UNIT_ALIASES = {
     "Hanrys": "H",
     "HANRY": "H",
     "HANRYS": "H",
+    "hz": "Hz",
+    "Hz": "Hz",
+    "HZ": "Hz",
+    "hertz": "Hz",
+    "Hertz": "Hz",
+    "HERTZ": "Hz",
     "s": "s",
     "sec": "s",
     "secs": "s",
@@ -150,7 +156,7 @@ def normalize_unit(unit: str) -> str:
         return ""
 
     # Preserve case-sensitive SI units first
-    if unit in {"A", "V", "F", "H"}:
+    if unit in {"A", "V", "F", "H", "Hz"}:
         return unit
 
     lower = unit.lower()

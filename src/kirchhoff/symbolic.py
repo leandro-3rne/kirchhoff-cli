@@ -1,6 +1,7 @@
 import re
 
 import sympy as sp
+from sympy.calculus.util import periodicity
 from sympy.parsing.sympy_parser import (
     auto_symbol,
     convert_xor,
@@ -20,7 +21,12 @@ IMPLICIT_ARG_FUNCTIONS = (
     "tanh",
     "exp",
     "log",
+    "ln",
     "sqrt",
+    "square",
+    "sawtooth",
+    "triangle",
+    "heaviside",
 )
 
 
@@ -37,6 +43,19 @@ def _normalize_math_input(expr: str, variable_name: str) -> str:
 
 def _sympify_with_complex_j(expr: str, variable_symbol: sp.Symbol) -> sp.Expr:
     normalized = _normalize_math_input(expr, variable_symbol.name)
+    def _square(arg: sp.Expr) -> sp.Expr:
+        # 2*pi-periodic square wave in {-1, 0, 1}
+        return sp.sign(sp.sin(arg))
+
+    def _sawtooth(arg: sp.Expr) -> sp.Expr:
+        # 2*pi-periodic normalized sawtooth in [-1, 1).
+        return 2 * (arg / (2 * sp.pi) - sp.floor(arg / (2 * sp.pi) + sp.Rational(1, 2)))
+
+    def _triangle(arg: sp.Expr) -> sp.Expr:
+        # 2*pi-periodic normalized triangle in [-1, 1].
+        saw = _sawtooth(arg)
+        return 2 * sp.Abs(saw) - 1
+
     locals_map = {
         "I": sp.I,
         "i": sp.I,
@@ -48,7 +67,12 @@ def _sympify_with_complex_j(expr: str, variable_symbol: sp.Symbol) -> sp.Expr:
         "tan": sp.tan,
         "exp": sp.exp,
         "log": sp.log,
+        "ln": sp.log,
         "sqrt": sp.sqrt,
+        "square": _square,
+        "sawtooth": _sawtooth,
+        "triangle": _triangle,
+        "heaviside": sp.Heaviside,
         variable_symbol.name: variable_symbol,
     }
     if variable_symbol.name not in {"i", "I"}:
@@ -99,6 +123,16 @@ def taylor_series(
     x = sp.Symbol(variable)
     expr = _sympify_with_complex_j(expression, x)
     a = _sympify_with_complex_j(around, x)
+
+    if expr.has(sp.floor, sp.Heaviside, sp.sign):
+        raise ValueError(
+            "Expression is not Taylor-compatible (contains discontinuous/non-smooth terms)."
+        )
+
+    # A Taylor expansion around `a` requires the function to be finite at `a`.
+    value_at_a = sp.simplify(expr.subs(x, a))
+    if value_at_a.is_finite is False or value_at_a.has(sp.zoo, sp.oo, -sp.oo, sp.nan):
+        raise ValueError("Expression is not finite at the expansion point.")
 
     series = sp.series(expr, x, a, order + 1)
     polynomial = sp.expand(series.removeO())
@@ -153,6 +187,19 @@ def fourier_series(
         raise ValueError("period must be positive")
 
     interval_half = sp.simplify(T / 2)
+    expr_period = periodicity(expr, x)
+    if expr_period is None and not expr.is_polynomial(x):
+        raise ValueError(
+            "Expression is not periodic (or periodicity cannot be determined) for Fourier series."
+        )
+    if expr_period is not None:
+        ratio = sp.simplify(T / expr_period)
+        if ratio.is_integer is False:
+            raise ValueError("Provided period is incompatible with expression periodicity.")
+
+    if expr.has(sp.cosh(x), sp.sinh(x), sp.tanh(x)):
+        raise ValueError("Expression is not periodic for the provided period.")
+
     try:
         fs_obj = sp.fourier_series(expr, (x, -interval_half, interval_half))
         partial_sum = fs_obj.truncate(order + 1)

@@ -40,6 +40,23 @@ def test_taylor_series_supports_caret_power_notation():
     assert sp.simplify(result["polynomial"] - (1 + x + x**2 / 2 + x**3 / 6)) == 0
 
 
+def test_taylor_series_supports_ln_alias():
+    result = taylor_series("ln(1+x)", around="0", order=3)
+    x = sp.Symbol("x")
+    expected = x - x**2 / 2 + x**3 / 3
+    assert sp.simplify(result["polynomial"] - expected) == 0
+
+
+def test_taylor_series_rejects_ln_at_zero():
+    with pytest.raises(ValueError):
+        taylor_series("ln(x)", around="0", order=5)
+
+
+def test_taylor_series_rejects_square_wave_alias():
+    with pytest.raises(ValueError):
+        taylor_series("squarex", around="0", order=3)
+
+
 def test_taylor_series_supports_root_as_power():
     result = taylor_series("x^(1/2)", around="1", order=2, value="1.21")
     assert result["true_value"] is not None
@@ -61,6 +78,15 @@ def test_taylor_series_rejects_unclosed_parenthesis():
 def test_taylor_series_rejects_negative_order():
     with pytest.raises(ValueError):
         taylor_series("x", order=-1)
+
+
+def test_taylor_series_rejects_nonsmooth_functions():
+    with pytest.raises(ValueError):
+        taylor_series("heaviside(x)", around="0", order=3)
+    with pytest.raises(ValueError):
+        taylor_series("sawtooth(x)", around="0", order=3)
+    with pytest.raises(ValueError):
+        taylor_series("triangle(x)", around="0", order=3)
 
 
 def test_taylor_series_treats_other_symbols_as_constants():
@@ -113,6 +139,16 @@ def test_fourier_series_rejects_non_positive_period():
         fourier_series("sin(x)", period="0", order=3)
 
 
+def test_fourier_series_rejects_non_periodic_expression():
+    with pytest.raises(ValueError):
+        fourier_series("cosh(x)", period="2*pi", order=3)
+
+
+def test_fourier_series_rejects_nonperiodic_ln():
+    with pytest.raises(ValueError):
+        fourier_series("ln(x)", period="2*pi", order=3)
+
+
 def test_fourier_series_treats_other_symbols_as_constants():
     result = fourier_series("a*sin(x)", variable="x", period="2*pi", order=2)
     a = sp.Symbol("a")
@@ -131,6 +167,18 @@ def test_fourier_series_accepts_suffix_function_shorthand():
     result = fourier_series("cosx + coshx", variable="x", period="2*pi", order=3)
     x = sp.Symbol("x")
     assert sp.simplify(result["expression"] - (sp.cos(x) + sp.cosh(x))) == 0
+
+
+def test_fourier_series_supports_periodic_special_functions():
+    x = sp.Symbol("x")
+    sq = fourier_series("squarex", variable="x", period="2*pi", order=5)
+    saw = fourier_series("sawtoothx", variable="x", period="2*pi", order=5)
+    tri = fourier_series("trianglex", variable="x", period="2*pi", order=5)
+    step = fourier_series("heaviside(sin(x))", variable="x", period="2*pi", order=5)
+    assert sq["expression"].has(sp.sign)
+    assert saw["expression"].has(sp.floor)
+    assert tri["expression"].has(sp.Abs)
+    assert step["expression"].has(sp.Heaviside)
 
 
 def test_taylor_series_accepts_suffix_function_shorthand():

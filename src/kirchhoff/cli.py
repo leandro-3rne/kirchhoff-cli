@@ -1,7 +1,11 @@
 import sys
+import cmath
+import math
+import re
 from typing import Optional
 
 import typer
+import sympy as sp
 from rich.console import Console
 from rich.table import Table
 
@@ -11,7 +15,7 @@ from kirchhoff.circuits import power as solve_power
 from kirchhoff.circuits import rc as solve_rc
 from kirchhoff.circuits import rl as solve_rl
 from kirchhoff.formatting import print_kv, print_title
-from kirchhoff.resistance import equivalent_resistance
+from kirchhoff.resistance import equivalent_impedance
 from kirchhoff.symbolic import taylor_series, fourier_series
 from kirchhoff.units import format_si, parse_value
 
@@ -71,7 +75,7 @@ def print_commands() -> None:
     table.add_column("Command", style=f"bold {ACCENT}", no_wrap=True)
     table.add_column("Description", style=SECONDARY)
 
-    table.add_row("r", "Calculate equivalent resistance from a series/parallel expression")
+    table.add_row("z", "Calculate equivalent impedance from a series/parallel expression")
     table.add_row("ohm", "Solve Ohm's law. Provide exactly two of V, I, and R")
     table.add_row("pow", "Compute power P and derived V, I, R values from two inputs")
     table.add_row("div", "Analyze voltage and current divider circuits")
@@ -91,6 +95,37 @@ def _parse_option_value(value: str, expected_unit: str, option_name: str) -> flo
         raise typer.BadParameter(f"Invalid value for {option_name}: {exc}") from exc
 
 
+def _format_taylor_polynomial(polynomial: object, variable: str) -> str:
+    """
+    Render Taylor polynomial in ascending powers where possible.
+    Falls back to default string if not a univariate polynomial form.
+    """
+    x = sp.Symbol(variable)
+    try:
+        poly = sp.Poly(sp.expand(polynomial), x)
+    except Exception:
+        return str(polynomial)
+
+    pieces: list[str] = []
+    for power in sorted(range(poly.degree() + 1)):
+        coeff = sp.simplify(poly.nth(power))
+        if coeff == 0:
+            continue
+        term = coeff if power == 0 else coeff * x**power
+        pieces.append(str(sp.simplify(term)))
+
+    if not pieces:
+        return "0"
+
+    rendered = pieces[0]
+    for piece in pieces[1:]:
+        if piece.startswith("-"):
+            rendered += f" - {piece[1:]}"
+        else:
+            rendered += f" + {piece}"
+    return rendered
+
+
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
@@ -99,26 +134,150 @@ def main(ctx: typer.Context) -> None:
 
 
 @app.command()
-def r(
+def z(
     expression_parts: list[str] = typer.Argument(
-        ...,
-        help='Resistance expression. Use quotes, e.g. "1k + (2k || 3k)".',
+        None,
+        help='Impedance expression. Use quotes, e.g. "(5 + 8j) || (6 - 1/8j)".',
+    ),
+    omega: Optional[str] = typer.Option(
+        None,
+        "--omega",
+        help="Angular frequency ω in rad/s (numeric only, e.g. 376.99).",
+    ),
+    freq: Optional[str] = typer.Option(
+        None,
+        "--freq",
+        help="Frequency f in Hz (e.g. 6, 6Hz, 78kHz).",
+    ),
+    r: Optional[str] = typer.Option(
+        None,
+        "--r",
+        help='Resistance network expression, e.g. "5 || 3 + 2".',
+    ),
+    c: Optional[str] = typer.Option(
+        None,
+        "--c",
+        help='Capacitor network expression, e.g. "5 + 3f" (uses + and || only).',
+    ),
+    l: Optional[str] = typer.Option(
+        None,
+        "--l",
+        help='Inductor network expression, e.g. "5h || 8kH" (uses + and || only).',
     ),
 ) -> None:
-    """Calculate equivalent resistance from a series/parallel expression"""
-    if len(expression_parts) != 1:
+    """Calculate equivalent impedance from a series/parallel expression"""
+    provided_modes = [r is not None, c is not None, l is not None]
+    if omega is not None and freq is not None:
+        raise typer.BadParameter("Use only one of --omega or --freq.")
+
+    if sum(provided_modes) > 1:
+        raise typer.BadParameter("Use at most one of --r, --c, --l.")
+
+    if sum(provided_modes) == 1 and expression_parts:
+        if r is not None:
+            option_name = "--r"
+            example = 'khoff z --r "5 || 3 + 2"'
+        elif c is not None:
+            option_name = "--c"
+            example = 'khoff z --c "5 + 3f"'
+        else:
+            option_name = "--l"
+            example = 'khoff z --l "5h || 8kH"'
         raise typer.BadParameter(
-            'Wrap the full expression in quotes, e.g. "1k + (2k || 3k)".'
+            f"Wrap the full expression for {option_name} in quotes, e.g. {example}."
         )
-    expression = expression_parts[0].strip()
+
+    if sum(provided_modes) == 0:
+        if not expression_parts or len(expression_parts) != 1:
+            raise typer.BadParameter(
+                'Wrap the full expression in quotes, e.g. "(5 + 8j) || (6 - 1/8j)".'
+            )
+        mode = "z"
+        expression = expression_parts[0].strip()
+    elif r is not None:
+        mode = "r"
+        expression = r.strip()
+    elif c is not None:
+        mode = "c"
+        expression = c.strip()
+    else:
+        mode = "l"
+        expression = l.strip()
+
+    omega_value: float | None = None
+    freq_value: float | None = None
+    given_freq = False
+
+    if omega is not None:
+        omega_text = omega.strip()
+        try:
+            if re.search(r"[A-Za-zµΩΩ]", omega_text):
+                raise ValueError("omega must be in rad/s and must not include a unit suffix")
+            omega_value = parse_value(omega_text)
+            freq_value = omega_value / (2 * math.pi)
+        except (TypeError, ValueError) as exc:
+            raise typer.BadParameter(f"Invalid value for --omega: {exc}") from exc
+
+    if freq is not None:
+        freq_text = freq.strip()
+        try:
+            freq_value = parse_value(freq_text, "Hz")
+            omega_value = 2 * math.pi * freq_value
+            given_freq = True
+        except (TypeError, ValueError) as exc:
+            raise typer.BadParameter(f"Invalid value for --freq: {exc}") from exc
+
+    if not expression:
+        raise typer.BadParameter(
+            "Invalid expression: expression must not be empty."
+        )
+
+    output_mode = "impedance"
+    eval_omega = omega_value
+    if mode in {"c", "l"} and eval_omega is None:
+        # Compute equivalent C/L without a supplied frequency.
+        eval_omega = 1.0
+        output_mode = mode
+
     try:
-        result = equivalent_resistance(expression)
+        z_eq = equivalent_impedance(expression, mode=mode, omega=eval_omega)
     except ValueError as exc:
         raise typer.BadParameter(f"Invalid expression: {exc}") from exc
 
-    print_title(console, "Resistance Analysis", PRIMARY)
+    if freq_value is None and omega_value is not None:
+        freq_value = omega_value / (2 * math.pi)
+
+    z_mag = abs(z_eq)
+    z_phase_deg = math.degrees(cmath.phase(z_eq))
+    z_repr = f"{z_eq.real:.6g} {'+' if z_eq.imag >= 0 else '-'} {abs(z_eq.imag):.6g}j"
+
+    print_title(console, "Impedance Analysis", PRIMARY)
     print_kv(console, "Expression", expression)
-    print_kv(console, "Req       ", format_si(result, "Ω"), bold_value=True)
+    if given_freq:
+        print_kv(console, "f", f"{freq_value:.6g} Hz")
+        print_kv(console, "ω", f"{omega_value:.6g} rad/s")
+    elif omega_value is not None:
+        print_kv(console, "ω", f"{omega_value:.6g} rad/s")
+        print_kv(console, "f", f"{freq_value:.6g} Hz")
+    else:
+        print_kv(console, "ω", "not provided")
+        print_kv(console, "f", "not provided")
+
+    if output_mode == "c":
+        if abs(z_eq.imag) < 1e-15:
+            raise typer.BadParameter("Invalid expression: equivalent capacitance is undefined.")
+        ceq = -1.0 / z_eq.imag
+        print_kv(console, "Ceq", format_si(ceq, "F"), bold_value=True)
+        return
+
+    if output_mode == "l":
+        leq = z_eq.imag
+        print_kv(console, "Leq", format_si(leq, "H"), bold_value=True)
+        return
+
+    print_kv(console, "Zeq", z_repr, bold_value=True)
+    print_kv(console, "|Z|", f"{z_mag:.6g}")
+    print_kv(console, "Phase", f"{z_phase_deg:.6g} deg")
 
 
 @app.command()
@@ -336,7 +495,8 @@ def ts(
     console.print(f"f({result['variable']}) = {result['expression']}")
     console.print(f"Around a   = {result['around']}")
     console.print(f"Order      = {result['order']}")
-    console.print(f"Polynomial = [bold]{result['polynomial']}[/bold]")
+    poly_text = _format_taylor_polynomial(result["polynomial"], variable)
+    console.print(f"Polynomial = [bold]{poly_text}[/bold]")
     if value is not None:
         console.print(f"P({value}) = {result['approximation']}")
         console.print(f"f({value}) = {result['true_value']}")
