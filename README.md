@@ -28,7 +28,7 @@ The recommended way to install a Python CLI tool is with `pipx`, because it keep
 
 Install `pipx` by following the official guide:
 
-<https://pipx.pypa.io/stable/installation/>
+[https://pipx.pypa.io/stable/installation/](https://pipx.pypa.io/stable/how-to/install-pipx/)
 
 Then install this tool from GitHub:
 
