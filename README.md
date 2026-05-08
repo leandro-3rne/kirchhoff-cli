@@ -33,15 +33,13 @@ Install `pipx` by following the official guide:
 Then install this tool from GitHub:
 
 ```bash
-pipx install git+https://github.com/<your-user>/kirchhoff-cli.git
+pipx install git+https://github.com/leandro-3rne/kirchhoff-cli.git
 ```
-
-Replace `<your-user>` with the GitHub account or organization that owns the repository.
 
 You can also clone the repository and install it locally:
 
 ```bash
-git clone https://github.com/<your-user>/kirchhoff-cli.git
+git clone https://github.com/leandro-3rne/kirchhoff-cli.git
 cd kirchhoff-cli
 pipx install .
 ```
