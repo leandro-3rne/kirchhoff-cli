@@ -1,6 +1,8 @@
-# kirchhoff-cli
+# Kirchhoff CLI
 
-`kirchhoff-cli` is a compact Python command-line toolkit for electrical engineering calculations. It provides quick terminal commands for impedance networks, Ohm's law, power calculations, divider circuits, RC/RL transients, Taylor series, and Fourier series.
+A Python command-line toolkit for circuit analysis and engineering mathematics.
+
+Kirchhoff CLI provides fast terminal-based utilities for common electrical engineering calculations, including equivalent resistance, Ohm’s law, power, voltage and current dividers, RC/RL transient analysis, Fourier series, and Taylor expansions.
 
 <p align="center">
   <img src="docs/images/khoff-overview.png" width="900">
